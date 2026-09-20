@@ -41,7 +41,7 @@ La aplicación tiene una arquitectura *Zero-Friction*: no requiere configuracion
 
 1. Clona el repositorio en tu máquina local:
 
-       git clone <URL_DEL_REPO>
+       git clone https://github.com/wearandas84/TicketApp
        cd TicketSystem
 
 2. Restaura las dependencias (Dapper y SQLite):
