@@ -44,3 +44,12 @@ public class ArchivoAdjunto
     public string ContentType { get; set; } = string.Empty;
     public bool EsEvidenciaSoporte { get; set; } = false; 
 }
+
+public class ComentarioTicket
+{
+    public int Id { get; set; }
+    public int TicketId { get; set; }
+    public string Texto { get; set; } = string.Empty;
+    public string Autor { get; set; } = "Soporte"; // Si tuvieras sesión completa, aquí iría el Username
+    public DateTime Fecha { get; set; } = DateTime.Now;
+}

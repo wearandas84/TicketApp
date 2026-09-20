@@ -1,12 +1,14 @@
 # Directorios de compilación
 bin/
 obj/
+publish_output/
 
 # Archivos de la base de datos local y subidas de usuarios
 tickets.db
 tickets.db-shm
 tickets.db-wal
 App_Data/
+deploy.zip
 
 # Configuraciones locales del IDE
 .idea/

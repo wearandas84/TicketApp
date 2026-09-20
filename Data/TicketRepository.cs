@@ -27,7 +27,7 @@ public class TicketRepository
             CREATE TABLE IF NOT EXISTS Usuarios (Id INTEGER PRIMARY KEY AUTOINCREMENT, Username TEXT, PasswordHash TEXT);
             CREATE TABLE IF NOT EXISTS Tickets (Id INTEGER PRIMARY KEY AUTOINCREMENT, Asunto TEXT, Descripcion TEXT, Nombre TEXT, Correo TEXT, Telefono TEXT, Estatus TEXT, FechaCreacion DATETIME, ResueltoPor TEXT);
             CREATE TABLE IF NOT EXISTS ArchivosAdjuntos (Id INTEGER PRIMARY KEY AUTOINCREMENT, TicketId INTEGER, NombreOriginal TEXT, RutaAlmacenamiento TEXT, ContentType TEXT, EsEvidenciaSoporte BOOLEAN);
-            
+            CREATE TABLE IF NOT EXISTS Comentarios (Id INTEGER PRIMARY KEY AUTOINCREMENT, TicketId INTEGER, Texto TEXT, Autor TEXT, Fecha DATETIME);
             INSERT OR IGNORE INTO sqlite_sequence (name, seq) VALUES ('Tickets', 1000);
         ");
         
@@ -129,5 +129,19 @@ public class TicketRepository
         using var connection = new SqliteConnection(_connectionString);
         var sql = "UPDATE Usuarios SET PasswordHash = @Hash WHERE Id = @Id";
         await connection.ExecuteAsync(sql, new { Hash = passwordHash, Id = id });
+    }
+    public async Task AgregarComentarioAsync(ComentarioTicket comentario)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        var sql = "INSERT INTO Comentarios (TicketId, Texto, Autor, Fecha) VALUES (@TicketId, @Texto, @Autor, @Fecha)";
+        await connection.ExecuteAsync(sql, comentario);
+    }
+
+    public async Task<IEnumerable<ComentarioTicket>> ObtenerComentariosAsync(int ticketId)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        return await connection.QueryAsync<ComentarioTicket>(
+            "SELECT * FROM Comentarios WHERE TicketId = @TicketId ORDER BY Fecha ASC", 
+            new { TicketId = ticketId });
     }
 }

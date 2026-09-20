@@ -47,7 +47,29 @@
                         <li><a href="/api/files/@arc.Id" target="_blank">@arc.NombreOriginal</a></li>
                     }
                 </ul>
+                <hr />
+                <h4>Bitácora de Soporte</h4>
+                <div class="comentarios-lista" style="max-height: 150px; overflow-y: auto; margin-bottom: 1rem; background: #f8fafc; padding: 1rem; border-radius: 4px; border: 1px solid var(--border);">
+                    @if (Comentarios == null || !Comentarios.Any())
+                    {
+                        <p style="color: #64748b; font-size: 0.9em; margin: 0;">No hay comentarios aún.</p>
+                    }
+                    else
+                    {
+                        @foreach(var c in Comentarios)
+                        {
+                            <div style="margin-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">
+                                <strong style="font-size: 0.85em; color: var(--primary);">@c.Autor - @c.Fecha.ToString("g")</strong>
+                                <p style="margin: 0.2rem 0; font-size: 0.95em;">@c.Texto</p>
+                            </div>
+                        }
+                    }
+                </div>
 
+                <div class="form-group" style="display: flex; gap: 0.5rem;">
+                    <input type="text" @bind="nuevoComentario" class="input-control" placeholder="Escribe un comentario o nota de resolución..." />
+                    <button class="btn secondary" type="button" @onclick="GuardarComentario">Agregar</button>
+                </div>
                 <hr />
                 <div class="form-group">
                     <label>Cambiar Estatus del Ticket:</label>
@@ -79,6 +101,8 @@
     [Parameter] public EventCallback OnClose { get; set; }
     
     private List<ArchivoAdjunto> Archivos = new();
+    private List<ComentarioTicket> Comentarios = new();
+    private string nuevoComentario = "";
     
     // Variables para manejar múltiples archivos y el mensaje de error
     private string ErrorEvidencia = "";
@@ -90,6 +114,8 @@
         {
             var res = await Repo.ObtenerArchivosPorTicketAsync(Ticket.Id);
             Archivos = res.ToList();
+            var resComentarios = await Repo.ObtenerComentariosAsync(Ticket.Id);
+            Comentarios = resComentarios.ToList();
         }
     }
 
@@ -165,7 +191,25 @@
 
         await OnClose.InvokeAsync();
     }
+
+    private async Task GuardarComentario()
+    {
+        if (string.IsNullOrWhiteSpace(nuevoComentario) || Ticket == null) return;
     
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var currentUser = authState.User.Identity?.Name ?? "Soporte";
+        await Repo.AgregarComentarioAsync(new ComentarioTicket 
+        { 
+            TicketId = Ticket.Id, 
+            Texto = nuevoComentario,
+            Autor = currentUser 
+        });
+        nuevoComentario = ""; 
+    
+        // Recargar la lista
+        var res = await Repo.ObtenerComentariosAsync(Ticket.Id);
+        Comentarios = res.ToList();
+    }
     private Task CerrarModal() 
     {
         // Limpiar memoria si el usuario cancela

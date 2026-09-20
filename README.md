@@ -3,7 +3,7 @@
 Este repositorio contiene un sistema ligero de soporte técnico, diseñado y desarrollado para cumplir con los requerimientos técnicos de la evaluación, y expandido con características adicionales de administración.
 
 El sistema permite a cualquier persona reportar problemas y adjuntar evidencia sin necesidad de crear una cuenta. Por otro lado, proporciona un panel de administración seguro para que el equipo de soporte pueda revisar, filtrar, responder y cerrar dichos tickets, manteniendo la privacidad de los archivos adjuntos.
-
+* URL Desplegado: https://ticketappdev.runasp.net/
 ---
 
 ## Características y Requisitos Cumplidos (Incluyendo Valor Agregado)
@@ -13,7 +13,7 @@ El sistema permite a cualquier persona reportar problemas y adjuntar evidencia s
 * **Seguridad de Archivos (Zero Public Access):** Los adjuntos se almacenan en el directorio interno `App_Data/Attachments` y no son accesibles públicamente. Solo se sirven mediante un endpoint protegido que valida la sesión del usuario.
 * **Panel de Soporte Autenticado:** Acceso restringido para el personal mediante login.
 * **Gestión de Estados:** Capacidad de filtrar tickets por estado (Abierto, En Progreso, Resuelto).
-* **Auditoría de Soporte y Trazabilidad (Extra):** El personal puede adjuntar su propia evidencia de resolución al cerrar un ticket. Además, el sistema **registra exactamente qué usuario de soporte cerró o actualizó el ticket**, mejorando el control de calidad.
+* **Auditoría de Soporte y Trazabilidad (Extra):** El personal puede colocar sus comentarios y adjuntar su propia evidencia de resolución al cerrar un ticket. Además, el sistema **registra exactamente qué usuario de soporte cerró o actualizó el ticket**, mejorando el control de calidad.
 * **Gestión de Usuarios (Extra):** Se agregó un panel administrativo que permite la creación de nuevos usuarios de soporte y la gestión/cambio de contraseñas, yendo más allá de una cuenta estática.
 * **Manejo de Errores:** Validaciones preventivas de tamaño y tipo de archivo, así como control de excepciones en la base de datos.
 

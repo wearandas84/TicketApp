@@ -13,4 +13,13 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
   </ItemGroup>
 
+  <ItemGroup>
+    <_ContentIncludedByDefault Remove="publish_output\web.config" />
+    <_ContentIncludedByDefault Remove="publish_output\appsettings.Development.json" />
+    <_ContentIncludedByDefault Remove="publish_output\appsettings.json" />
+    <_ContentIncludedByDefault Remove="publish_output\TicketApp.deps.json" />
+    <_ContentIncludedByDefault Remove="publish_output\TicketApp.runtimeconfig.json" />
+    <_ContentIncludedByDefault Remove="publish_output\TicketApp.staticwebassets.endpoints.json" />
+  </ItemGroup>
+
 </Project>
