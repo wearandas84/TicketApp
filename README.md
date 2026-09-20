@@ -23,7 +23,7 @@ El sistema permite a cualquier persona reportar problemas y adjuntar evidencia s
 
 * **Framework:** .NET 10
 * **Frontend:** Blazor (Interactive Server) + HTML5.
-* **Estilos:** CSS3 puro (sin uso de librerías externas). Toda la UI, incluyendo modales responsivos, fue construida desde cero con tu ayuda.
+* **Estilos:** CSS3 puro (sin uso de librerías externas). Toda la UI, incluyendo modales responsivos, fue construida con ayuda de la IA Gemini.
 * **Base de Datos:** SQLite (Embebida y autogenerada).
 * **ORM:** Dapper (Micro-ORM elegido para maximizar el rendimiento y control sobre SQL).
 * **Alojamiento:** Desplegado en **MonsterASP.NET** (garantizando almacenamiento en disco persistente).
@@ -42,7 +42,7 @@ La aplicación tiene una arquitectura *Zero-Friction*: no requiere configuracion
 1. Clona el repositorio en tu máquina local:
 
        git clone https://github.com/wearandas84/TicketApp
-       cd TicketSystem
+       cd TicketApp
 
 2. Restaura las dependencias (Dapper y SQLite):
 
