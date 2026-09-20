@@ -1,0 +1,217 @@
+@page "/dashboard"
+@using TicketApp.Models
+@using TicketApp.Data
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject TicketRepository Repo
+
+<div class="container" style="max-width: 1000px;">
+    <div class="header-actions" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem;">
+        <!-- Título a la izquierda -->
+        <h1 style="margin: 0;">Panel de Soporte</h1>
+    
+        <!-- Botones agrupados a la derecha -->
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <button class="btn @(vistaActual == "tickets" ? "primary" : "secondary")" @onclick="@(() => CambiarVista("tickets"))">Tickets</button>
+            <button class="btn @(vistaActual == "usuarios" ? "primary" : "secondary")" @onclick="@(() => CambiarVista("usuarios"))">Usuarios</button>
+        
+            <!-- Enlace de Cerrar Sesión con la nueva clase visual -->
+            <a href="/logout" style="background-color: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 0.55rem 1.2rem; text-decoration: none; display: inline-flex; border-radius: 4px; font-weight: 500; align-items: center; justify-content: center; height: 42px; box-sizing: border-box; transition: background-color 0.2s;">Cerrar Sesión</a>
+        </div>
+    </div>
+
+    @if (vistaActual == "tickets")
+    {
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+            <h3 style="margin: 0;">Gestión de Tickets</h3>
+        
+            <select @bind="FiltroEstatus" @bind:after="CargarTickets" class="input-control auto-width">
+                <option value="">Todos los Estatus</option>
+                <option value="Abierto">Abierto</option>
+                <option value="En Progreso">En Progreso</option>
+                <option value="Resuelto">Resuelto</option>
+            </select>
+        </div>
+
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Folio</th>
+                    <th>Asunto</th>
+                    <th>Solicitante</th>
+                    <th>Fecha</th>
+                    <th>Estatus</th>
+                    <th>Atendido por</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var t in Tickets)
+                {
+                    <tr>
+                        <td><strong>@t.Folio</strong></td>
+                        <td>@t.Asunto</td>
+                        <td>@t.Nombre <br/><small style="color: #64748b;">@t.Correo</small></td>
+                        <td>@t.FechaCreacion.ToShortDateString()</td>
+                        <td><span class="badge @t.Estatus.Replace(" ", "").ToLower()">@t.Estatus</span></td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(t.ResueltoPor))
+                            {
+                                <span style="font-size: 0.85em; color: #475569;">@t.ResueltoPor</span>
+                            }
+                            else
+                            {
+                                <span style="color: #cbd5e1;">-</span>
+                            }
+                        </td>
+                        <td><button class="btn small" @onclick="() => AbrirTicket(t)">Revisar</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else if (vistaActual == "usuarios")
+    {
+        @if (!string.IsNullOrEmpty(mensajeExitoUsuarios))
+        {
+            <div style="background: #dcfce3; color: #166534; padding: 1rem; border-radius: 4px; margin-bottom: 1rem; border: 1px solid #bbf7d0;">
+                @mensajeExitoUsuarios
+            </div>
+        }
+
+        <div class="form-container-styled">
+            <h3>Crear Nuevo Usuario</h3>
+            <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+                <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                    <label>Username</label>
+                    <input type="text" class="input-control" @bind="nuevoUser" />
+                </div>
+                <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                    <label>Contraseña</label>
+                    <input type="password" class="input-control" @bind="nuevoPass" />
+                </div>
+                <button class="btn primary" @onclick="GuardarUsuario">Crear Usuario</button>
+            </div>
+        </div>
+
+        <h3>Usuarios del Sistema</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Nueva Contraseña</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var u in Usuarios)
+                {
+                    <tr>
+                        <td>@u.Id</td>
+                        <td>@u.Username</td>
+                        <td>
+                            <!-- Agregamos el atributo 'value' para que Blazor pueda limpiar el campo -->
+                            <input type="password" class="input-control auto-width" placeholder="Nueva clave..." 
+                                   value="@(dicPasswords.ContainsKey(u.Id) ? dicPasswords[u.Id] : "")"
+                                   @onchange="@(e => dicPasswords[u.Id] = e.Value?.ToString() ?? "")" />
+                        </td>
+                        <td>
+                            <button class="btn small primary" @onclick="() => CambiarPassword(u.Id)">Actualizar Clave</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+<TicketDetailModal IsVisible="modalVisible" Ticket="ticketSeleccionado" OnClose="ModalCerrado" />
+
+@code {
+    private string vistaActual = "tickets";
+
+    // Variables de Tickets
+    private List<Ticket> Tickets = new();
+    private string FiltroEstatus = "";
+    private bool modalVisible = false;
+    private Ticket? ticketSeleccionado;
+
+    // Variables de Usuarios
+    private List<Usuario> Usuarios = new();
+    private string nuevoUser = "";
+    private string nuevoPass = "";
+    private Dictionary<int, string> dicPasswords = new();
+    private string mensajeExitoUsuarios = ""; // <-- Nueva variable
+
+    // Agrega este método para limpiar mensajes al cambiar de pestaña
+    private void CambiarVista(string nuevaVista)
+    {
+        vistaActual = nuevaVista;
+        mensajeExitoUsuarios = ""; 
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarTickets();
+        await CargarUsuarios();
+    }
+
+    // --- MÉTODOS DE TICKETS ---
+    private async Task CargarTickets()
+    {
+        var res = await Repo.ObtenerTicketsAsync(string.IsNullOrEmpty(FiltroEstatus) ? null : FiltroEstatus);
+        Tickets = res.ToList();
+    }
+
+    private void AbrirTicket(Ticket ticket)
+    {
+        ticketSeleccionado = ticket;
+        modalVisible = true;
+        StateHasChanged();
+    }
+
+    private async Task ModalCerrado()
+    {
+        modalVisible = false;
+        ticketSeleccionado = null;
+        await CargarTickets(); 
+    }
+
+    // --- MÉTODOS DE USUARIOS ---
+    private async Task CargarUsuarios()
+    {
+        var res = await Repo.ObtenerUsuariosAsync();
+        Usuarios = res.ToList();
+        dicPasswords.Clear(); // Esto ahora sí limpiará visualmente los inputs
+    }
+
+    private async Task GuardarUsuario()
+    {
+        mensajeExitoUsuarios = "";
+        if (string.IsNullOrWhiteSpace(nuevoUser) || string.IsNullOrWhiteSpace(nuevoPass)) return;
+        
+        await Repo.CrearUsuarioAsync(nuevoUser, nuevoPass);
+        nuevoUser = "";
+        nuevoPass = "";
+        mensajeExitoUsuarios = "Usuario creado exitosamente.";
+        
+        await CargarUsuarios();
+    }
+
+    private async Task CambiarPassword(int id)
+    {
+        mensajeExitoUsuarios = "";
+        if (dicPasswords.TryGetValue(id, out string nuevaClave) && !string.IsNullOrWhiteSpace(nuevaClave))
+        {
+            await Repo.ActualizarPasswordAsync(id, nuevaClave);
+            
+            mensajeExitoUsuarios = "Contraseña actualizada correctamente.";
+            
+            // Al llamar a CargarUsuarios, el diccionario se limpia (dicPasswords.Clear())
+            // Y como ahora amarramos el 'value' del input, se borrarán los asteriscos
+            await CargarUsuarios(); 
+        }
+    }
+}

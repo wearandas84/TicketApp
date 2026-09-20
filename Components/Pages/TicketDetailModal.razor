@@ -1,0 +1,181 @@
+@using TicketApp.Models
+@using TicketApp.Data
+@using Microsoft.AspNetCore.Components.Authorization
+@inject TicketRepository Repo
+@inject IWebHostEnvironment Env
+@inject IConfiguration Config
+@inject AuthenticationStateProvider AuthStateProvider
+
+@if (IsVisible && Ticket != null)
+{
+    <div class="modal-backdrop">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Ticket @Ticket.Folio - @Ticket.Asunto</h2>
+                <button class="close-btn" @onclick="CerrarModal">X</button>
+            </div>
+            
+            <div class="modal-body">
+                <p><strong>Solicitante:</strong> @Ticket.Nombre (<a href="mailto:@Ticket.Correo">@Ticket.Correo</a>)</p>
+                @if(!string.IsNullOrEmpty(Ticket.Telefono)){
+                    <p><strong>Teléfono:</strong> @Ticket.Telefono</p>
+                }
+                <p><strong>Fecha de Reporte:</strong> @Ticket.FechaCreacion.ToString("g")</p>
+                @if (!string.IsNullOrEmpty(Ticket.ResueltoPor))
+                {
+                    <p><strong>Resuelto por:</strong> <span class="badge resuelto">@Ticket.ResueltoPor</span></p>
+                }
+                
+                <p><strong>Descripción del Problema:</strong></p>
+                <div class="ticket-desc">@Ticket.Descripcion</div>
+                
+                <hr />
+                <h4>Archivos Adjuntos (Usuario)</h4>
+                @if(!Archivos.Any(a => !a.EsEvidenciaSoporte)) { <p><small>Sin archivos adjuntos.</small></p> }
+                <ul>
+                    @foreach(var arc in Archivos.Where(a => !a.EsEvidenciaSoporte))
+                    {
+                        <li><a href="/api/files/@arc.Id" target="_blank">@arc.NombreOriginal</a></li>
+                    }
+                </ul>
+
+                <h4>Evidencia de Soporte (Auditoría)</h4>
+                @if(!Archivos.Any(a => a.EsEvidenciaSoporte)) { <p><small>Aún no hay evidencia del equipo de soporte.</small></p> }
+                <ul>
+                    @foreach(var arc in Archivos.Where(a => a.EsEvidenciaSoporte))
+                    {
+                        <li><a href="/api/files/@arc.Id" target="_blank">@arc.NombreOriginal</a></li>
+                    }
+                </ul>
+
+                <hr />
+                <div class="form-group">
+                    <label>Cambiar Estatus del Ticket:</label>
+                    <select class="input-control" @bind="Ticket.Estatus">
+                        <option value="Abierto">Abierto</option>
+                        <option value="En Progreso">En Progreso</option>
+                        <option value="Resuelto">Resuelto</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Añadir Evidencia de Resolución (Max 3 archivos, 5MB c/u):</label>
+                    <InputFile OnChange="SubirEvidenciaSoporte" multiple accept=".jpg,.png,.webp,.pdf" class="input-control" />
+                    @if(!string.IsNullOrEmpty(ErrorEvidencia)){ <div style="color:red; font-size: 0.85em; margin-top: 5px;">@ErrorEvidencia</div> }
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn secondary" @onclick="CerrarModal">Cancelar</button>
+                <button class="btn primary" @onclick="GuardarCambios">Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public Ticket? Ticket { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    
+    private List<ArchivoAdjunto> Archivos = new();
+    
+    // Variables para manejar múltiples archivos y el mensaje de error
+    private string ErrorEvidencia = "";
+    private List<(MemoryStream Stream, string Nombre, string ContentType)> evidenciasMemoria = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible && Ticket != null)
+        {
+            var res = await Repo.ObtenerArchivosPorTicketAsync(Ticket.Id);
+            Archivos = res.ToList();
+        }
+    }
+
+    private async Task SubirEvidenciaSoporte(InputFileChangeEventArgs e)
+    {
+        ErrorEvidencia = ""; 
+        
+        // Limpiar memoria si el usuario vuelve a seleccionar archivos
+        foreach (var ev in evidenciasMemoria)
+        {
+            await ev.Stream.DisposeAsync();
+        }
+        evidenciasMemoria.Clear();
+
+        var files = e.GetMultipleFiles(3); 
+
+        foreach (var file in files)
+        {
+            if (file.Size > 5 * 1024 * 1024)
+            {
+                ErrorEvidencia = $"El archivo {file.Name} supera los 5 MB.";
+                foreach (var ev in evidenciasMemoria) { await ev.Stream.DisposeAsync(); }
+                evidenciasMemoria.Clear();
+                return;
+            }
+
+            var ms = new MemoryStream();
+            await file.OpenReadStream(5 * 1024 * 1024).CopyToAsync(ms);
+            evidenciasMemoria.Add((ms, file.Name, file.ContentType));
+        }
+    }
+
+    private async Task GuardarCambios()
+    {
+        if (Ticket == null) return;
+
+        // Obtener usuario actual
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var currentUser = authState.User.Identity?.Name;
+
+        // Actualizar Estatus de forma independiente a los archivos
+        await Repo.ActualizarEstatusTicketAsync(Ticket.Id, Ticket.Estatus, currentUser);
+
+        // Guardar archivos SOLO si se seleccionaron (Opcional)
+        if (evidenciasMemoria.Any())
+        {
+            var relativePath = Config["FileStorage:AttachmentsPath"] ?? "App_Data/Attachments";
+            var uploadPath = Path.Combine(Env.ContentRootPath, relativePath);
+            Directory.CreateDirectory(uploadPath);
+
+            foreach (var evidencia in evidenciasMemoria)
+            {
+                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(evidencia.Nombre);
+                var filePath = Path.Combine(uploadPath, fileName);
+
+                evidencia.Stream.Position = 0; 
+                await using FileStream fs = new(filePath, FileMode.Create);
+                await evidencia.Stream.CopyToAsync(fs);
+
+                await Repo.GuardarArchivoAsync(new ArchivoAdjunto
+                {
+                    TicketId = Ticket.Id,
+                    NombreOriginal = evidencia.Nombre,
+                    RutaAlmacenamiento = filePath,
+                    ContentType = evidencia.ContentType,
+                    EsEvidenciaSoporte = true
+                });
+                
+                await evidencia.Stream.DisposeAsync();
+            }
+            evidenciasMemoria.Clear(); 
+        }
+
+        await OnClose.InvokeAsync();
+    }
+    
+    private Task CerrarModal() 
+    {
+        // Limpiar memoria si el usuario cancela
+        foreach (var ev in evidenciasMemoria)
+        {
+            ev.Stream.Dispose();
+        }
+        evidenciasMemoria.Clear();
+        ErrorEvidencia = "";
+        
+        return OnClose.InvokeAsync();
+    }
+}

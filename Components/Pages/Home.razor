@@ -1,0 +1,139 @@
+﻿@page "/"
+@using TicketApp.Models
+@using TicketApp.Data
+@rendermode InteractiveServer
+@inject TicketRepository Repo
+@inject IWebHostEnvironment Env
+@inject IConfiguration Config
+
+<div class="container">
+    <h1>Reportar un Problema</h1>
+    
+    @if (!string.IsNullOrEmpty(MensajeError))
+    {
+        <div class="alert error">@MensajeError</div>
+    }
+    @if (!string.IsNullOrEmpty(TicketFolioExito))
+    {
+        <div class="alert success">
+            ¡Ticket enviado con éxito!<br/>
+            Tu número de seguimiento es: <strong>@TicketFolioExito</strong>
+        </div>
+        <button class="btn primary" style="margin-top:1rem;" @onclick="NuevoTicket">Reportar otro problema</button>
+    }
+    else
+    {
+        <EditForm Model="nuevoTicket" OnValidSubmit="GuardarTicket" class="form-container">
+            <DataAnnotationsValidator />
+            
+            <div class="form-group">
+                <label>Asunto:</label>
+                <InputText @bind-Value="nuevoTicket.Asunto" class="input-control" />
+                <ValidationMessage For="@(() => nuevoTicket.Asunto)" style="color:red; font-size: 0.85em;"/>
+            </div>
+            
+            <div class="form-group">
+                <label>Descripción:</label>
+                <InputTextArea @bind-Value="nuevoTicket.Descripcion" class="input-control" rows="4" />
+                <ValidationMessage For="@(() => nuevoTicket.Descripcion)" style="color:red; font-size: 0.85em;"/>
+            </div>
+            
+            <div class="form-group">
+                <label>Nombre Completo:</label>
+                <InputText @bind-Value="nuevoTicket.Nombre" class="input-control" />
+                <ValidationMessage For="@(() => nuevoTicket.Nombre)" style="color:red; font-size: 0.85em;"/>
+            </div>
+            
+            <div class="form-group">
+                <label>Correo Electrónico:</label>
+                <InputText @bind-Value="nuevoTicket.Correo" type="email" class="input-control" />
+                <ValidationMessage For="@(() => nuevoTicket.Correo)" style="color:red; font-size: 0.85em;"/>
+            </div>
+            
+            <div class="form-group">
+                <label>Teléfono (Opcional):</label>
+                <InputText @bind-Value="nuevoTicket.Telefono" type="tel" class="input-control" />
+            </div>
+            
+            <div class="form-group">
+                <label>Evidencia (Max 3 archivos, 5MB c/u. PDF, JPG, PNG, WEBP):</label>
+                <InputFile OnChange="CargarArchivos" multiple accept=".jpg,.jpeg,.png,.webp,.pdf" class="input-control" />
+            </div>
+            
+            <button type="submit" class="btn primary" disabled="@guardando">Enviar Ticket</button>
+        </EditForm>
+    }
+</div>
+
+@code {
+    private Ticket nuevoTicket = new();
+    private IReadOnlyList<IBrowserFile>? archivosSeleccionados;
+    private string MensajeError = "";
+    private string TicketFolioExito = "";
+    private bool guardando = false;
+    private long maxFileSize = 5 * 1024 * 1024; 
+
+    private void CargarArchivos(InputFileChangeEventArgs e)
+    {
+        MensajeError = "";
+        
+        // Validación de cantidad
+        if (e.GetMultipleFiles().Count > 3)
+        {
+            MensajeError = "Máximo 3 archivos permitidos.";
+            return;
+        }
+        
+        var permitidos = new[] { "image/jpeg", "image/png", "image/webp", "application/pdf" };
+        foreach (var file in e.GetMultipleFiles())
+        {
+            // Validación de tamaño y tipo
+            if (file.Size > maxFileSize) MensajeError = $"El archivo {file.Name} supera los 5MB.";
+            if (!permitidos.Contains(file.ContentType)) MensajeError = $"El archivo {file.Name} no es válido.";
+        }
+        if (string.IsNullOrEmpty(MensajeError)) archivosSeleccionados = e.GetMultipleFiles();
+    }
+
+    private async Task GuardarTicket()
+    {
+        if (!string.IsNullOrEmpty(MensajeError)) return;
+        guardando = true;
+        try
+        {
+            var ticketId = await Repo.CrearTicketAsync(nuevoTicket);
+            nuevoTicket.Id = ticketId; 
+
+            if (archivosSeleccionados != null)
+            {
+                // Archivos protegidos fuera de wwwroot
+                var uploadPath = Path.Combine(Env.ContentRootPath, "App_Data", "Attachments");
+                Directory.CreateDirectory(uploadPath); 
+
+                foreach (var file in archivosSeleccionados)
+                {
+                    var filePath = Path.Combine(uploadPath, Guid.NewGuid().ToString() + Path.GetExtension(file.Name));
+                    await using FileStream fs = new(filePath, FileMode.Create);
+                    await file.OpenReadStream(maxFileSize).CopyToAsync(fs);
+
+                    await Repo.GuardarArchivoAsync(new ArchivoAdjunto
+                    {
+                        TicketId = ticketId, NombreOriginal = file.Name,
+                        RutaAlmacenamiento = filePath, ContentType = file.ContentType,
+                        EsEvidenciaSoporte = false
+                    });
+                }
+            }
+            TicketFolioExito = nuevoTicket.Folio;
+        }
+        catch (Exception ex) { MensajeError = "Error: " + ex.Message; }
+        finally { guardando = false; }
+    }
+
+    private void NuevoTicket()
+    {
+        nuevoTicket = new Ticket();
+        archivosSeleccionados = null;
+        TicketFolioExito = "";
+        MensajeError = "";
+    }
+}

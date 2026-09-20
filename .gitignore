@@ -1,0 +1,13 @@
+# Directorios de compilación
+bin/
+obj/
+
+# Archivos de la base de datos local y subidas de usuarios
+tickets.db
+tickets.db-shm
+tickets.db-wal
+App_Data/
+
+# Configuraciones locales del IDE
+.idea/
+*.user

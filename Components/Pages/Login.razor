@@ -1,0 +1,29 @@
+@page "/login"
+
+<div class="container" style="max-width: 400px; margin-top: 50px;">
+    <h2>Acceso a Soporte</h2>
+    
+    @if (Error == "true")
+    {
+        <div class="alert error">Credenciales incorrectas.</div>
+    }
+
+    <form method="post" action="/api/login" data-enhance="false">
+        <div class="form-group">
+            <label>Usuario</label>
+            <input type="text" name="Username" class="input-control" required />
+        </div>
+        
+        <div class="form-group">
+            <label>Contraseña</label>
+            <input type="password" name="Password" class="input-control" required />
+        </div>
+        
+        <button type="submit" class="btn primary">Ingresar</button>
+    </form>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? Error { get; set; }
+}
