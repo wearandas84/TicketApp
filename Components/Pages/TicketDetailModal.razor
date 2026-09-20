@@ -83,7 +83,7 @@
                 <div class="form-group">
                     <label>Añadir Evidencia de Resolución (Max 3 archivos, 5MB c/u):</label>
                     <InputFile OnChange="SubirEvidenciaSoporte" multiple accept=".jpg,.png,.webp,.pdf" class="input-control" />
-                    @if(!string.IsNullOrEmpty(ErrorEvidencia)){ <div style="color:red; font-size: 0.85em; margin-top: 5px;">@ErrorEvidencia</div> }
+                    @if(!string.IsNullOrEmpty(ErrorEvidencia)){ <div style="color:red; font-size: 0.85em; margin-top: 5px; font-weight: 500;">@ErrorEvidencia</div> }
                 </div>
             </div>
 
@@ -104,9 +104,8 @@
     private List<ComentarioTicket> Comentarios = new();
     private string nuevoComentario = "";
     
-    // Variables para manejar múltiples archivos y el mensaje de error
     private string ErrorEvidencia = "";
-    private List<(MemoryStream Stream, string Nombre, string ContentType)> evidenciasMemoria = new();
+    private IReadOnlyList<IBrowserFile>? archivosEvidencia;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -119,16 +118,16 @@
         }
     }
 
-    private async Task SubirEvidenciaSoporte(InputFileChangeEventArgs e)
+    private void SubirEvidenciaSoporte(InputFileChangeEventArgs e)
     {
         ErrorEvidencia = ""; 
-        
-        // Limpiar memoria si el usuario vuelve a seleccionar archivos
-        foreach (var ev in evidenciasMemoria)
+        archivosEvidencia = null;
+
+        if (e.FileCount > 3)
         {
-            await ev.Stream.DisposeAsync();
+            ErrorEvidencia = "Máximo 3 archivos permitidos.";
+            return;
         }
-        evidenciasMemoria.Clear();
 
         var files = e.GetMultipleFiles(3); 
 
@@ -137,56 +136,54 @@
             if (file.Size > 5 * 1024 * 1024)
             {
                 ErrorEvidencia = $"El archivo {file.Name} supera los 5 MB.";
-                foreach (var ev in evidenciasMemoria) { await ev.Stream.DisposeAsync(); }
-                evidenciasMemoria.Clear();
                 return;
             }
-
-            var ms = new MemoryStream();
-            await file.OpenReadStream(5 * 1024 * 1024).CopyToAsync(ms);
-            evidenciasMemoria.Add((ms, file.Name, file.ContentType));
         }
+        
+        archivosEvidencia = files;
     }
 
     private async Task GuardarCambios()
     {
         if (Ticket == null) return;
 
-        // Obtener usuario actual
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var currentUser = authState.User.Identity?.Name;
 
-        // Actualizar Estatus de forma independiente a los archivos
         await Repo.ActualizarEstatusTicketAsync(Ticket.Id, Ticket.Estatus, currentUser);
 
-        // Guardar archivos SOLO si se seleccionaron (Opcional)
-        if (evidenciasMemoria.Any())
+        if (archivosEvidencia != null && archivosEvidencia.Any())
         {
-            var relativePath = Config["FileStorage:AttachmentsPath"] ?? "App_Data/Attachments";
-            var uploadPath = Path.Combine(Env.ContentRootPath, relativePath);
-            Directory.CreateDirectory(uploadPath);
-
-            foreach (var evidencia in evidenciasMemoria)
+            try
             {
-                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(evidencia.Nombre);
-                var filePath = Path.Combine(uploadPath, fileName);
+                var relativePath = Config["FileStorage:AttachmentsPath"] ?? "App_Data/Attachments";
+                var uploadPath = Path.Combine(Env.ContentRootPath, relativePath);
+                Directory.CreateDirectory(uploadPath);
 
-                evidencia.Stream.Position = 0; 
-                await using FileStream fs = new(filePath, FileMode.Create);
-                await evidencia.Stream.CopyToAsync(fs);
-
-                await Repo.GuardarArchivoAsync(new ArchivoAdjunto
+                foreach (var file in archivosEvidencia)
                 {
-                    TicketId = Ticket.Id,
-                    NombreOriginal = evidencia.Nombre,
-                    RutaAlmacenamiento = filePath,
-                    ContentType = evidencia.ContentType,
-                    EsEvidenciaSoporte = true
-                });
-                
-                await evidencia.Stream.DisposeAsync();
+                    var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.Name);
+                    var filePath = Path.Combine(uploadPath, fileName);
+
+                    await using FileStream fs = new(filePath, FileMode.Create);
+                    await file.OpenReadStream(5 * 1024 * 1024).CopyToAsync(fs);
+
+                    await Repo.GuardarArchivoAsync(new ArchivoAdjunto
+                    {
+                        TicketId = Ticket.Id,
+                        NombreOriginal = file.Name,
+                        RutaAlmacenamiento = filePath,
+                        ContentType = file.ContentType,
+                        EsEvidenciaSoporte = true
+                    });
+                }
+                archivosEvidencia = null; 
             }
-            evidenciasMemoria.Clear(); 
+            catch (Exception ex)
+            {
+                ErrorEvidencia = "Error al guardar: " + ex.Message;
+                return; 
+            }
         }
 
         await OnClose.InvokeAsync();
@@ -206,20 +203,14 @@
         });
         nuevoComentario = ""; 
     
-        // Recargar la lista
         var res = await Repo.ObtenerComentariosAsync(Ticket.Id);
         Comentarios = res.ToList();
     }
+
     private Task CerrarModal() 
     {
-        // Limpiar memoria si el usuario cancela
-        foreach (var ev in evidenciasMemoria)
-        {
-            ev.Stream.Dispose();
-        }
-        evidenciasMemoria.Clear();
+        archivosEvidencia = null;
         ErrorEvidencia = "";
-        
         return OnClose.InvokeAsync();
     }
 }
